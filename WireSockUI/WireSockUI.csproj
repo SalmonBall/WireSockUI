@@ -104,6 +104,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\WireSockUI.AppRouting\WireSockUI.AppRouting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Update="Extensions\MenuTextExtender.cs">
       <SubType>Component</SubType>
     </Compile>
