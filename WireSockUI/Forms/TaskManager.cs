@@ -9,6 +9,7 @@ using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AppRouting = WireSockUI.AppRouting;
 using WireSockUI.Extensions;
 using WireSockUI.Native;
 using WireSockUI.Properties;
@@ -19,7 +20,7 @@ namespace WireSockUI.Forms
     {
         private const int FilterDebounceMilliseconds = 150;
         private readonly List<ListViewItem> _cachedProcessListItems = new List<ListViewItem>();
-        private readonly ProcessSnapshotCache _processSnapshotCache = new ProcessSnapshotCache();
+        private readonly AppRouting.ProcessSnapshotCache _processSnapshotCache = new AppRouting.ProcessSnapshotCache();
         private readonly string _currentUserSid;
         private ListViewItem[] _cachedProcessListItemArray = Array.Empty<ListViewItem>();
         private System.Windows.Forms.Timer _filterTimer;
@@ -168,7 +169,7 @@ namespace WireSockUI.Forms
         }
 
         private static ProcessRefreshResult BuildProcessRefreshResult(
-            IEnumerable<ProcessEntry> processSnapshot,
+            IEnumerable<AppRouting.ProcessEntry> processSnapshot,
             bool hideOtherUsers,
             string currentUserSid,
             CancellationToken cancellationToken)
@@ -176,9 +177,9 @@ namespace WireSockUI.Forms
             var result = new ProcessRefreshResult();
             try
             {
-                var processes = (processSnapshot ?? Enumerable.Empty<ProcessEntry>())
+                var processes = (processSnapshot ?? Enumerable.Empty<AppRouting.ProcessEntry>())
                     .Where(p => ShouldIncludeProcessForUser(p, hideOtherUsers, currentUserSid))
-                    .Distinct(ProcessEntry.Comparer);
+                    .Distinct(AppRouting.ProcessEntry.Comparer);
 
                 foreach (var process in processes)
                 {
@@ -261,14 +262,15 @@ namespace WireSockUI.Forms
             _cachedProcessListItemArray = _cachedProcessListItems.ToArray();
         }
 
-        internal static string GetProcessMatchName(ProcessEntry process)
+        internal static string GetProcessMatchName(object process)
         {
-            if (process == null)
+            var appProcess = ToAppRoutingProcessEntry(process);
+            if (appProcess == null)
                 return null;
 
-            var matchName = !string.IsNullOrWhiteSpace(process.ImageName)
-                ? Path.GetFileName(process.ImageName)
-                : Path.GetFileName(process.Name);
+            var matchName = !string.IsNullOrWhiteSpace(appProcess.ImageName)
+                ? Path.GetFileName(appProcess.ImageName)
+                : Path.GetFileName(appProcess.Name);
             if (string.IsNullOrWhiteSpace(matchName))
                 return null;
 
@@ -276,16 +278,37 @@ namespace WireSockUI.Forms
         }
 
         internal static bool ShouldIncludeProcessForUser(
-            ProcessEntry process,
+            object process,
             bool hideOtherUsers,
             string currentUserSid)
         {
-            if (process == null)
+            var appProcess = ToAppRoutingProcessEntry(process);
+            if (appProcess == null)
                 return false;
             if (!hideOtherUsers)
                 return true;
             return !string.IsNullOrWhiteSpace(currentUserSid) &&
-                   string.Equals(process.User, currentUserSid, StringComparison.OrdinalIgnoreCase);
+                   string.Equals(appProcess.User, currentUserSid, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static AppRouting.ProcessEntry ToAppRoutingProcessEntry(object process)
+        {
+            if (process == null)
+                return null;
+
+            if (process is AppRouting.ProcessEntry appProcess)
+                return appProcess;
+
+            if (process is WireSockUI.Native.ProcessEntry nativeProcess)
+            {
+                return new AppRouting.ProcessEntry(
+                   nativeProcess.ProcessId,
+                   nativeProcess.Name,
+                   nativeProcess.ImageName,
+                   nativeProcess.User);
+            }
+
+            throw new ArgumentException($"Unsupported process type: {process.GetType().FullName}", nameof(process));
         }
 
         private void FilterProcesses(string filter)
